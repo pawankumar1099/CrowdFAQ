@@ -31,7 +31,8 @@ async function enrichQuestion(q) {
   ]);
   const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
   const author = await User.findById(q.userId).select('name reputation');
-  return { ...q.toObject(), answerCount, score, author };
+  const obj = q.toObject();
+  return { ...obj, id: obj._id.toString(), answerCount, score, author };
 }
 
 router.get('/', optionalAuth, async (req, res) => {

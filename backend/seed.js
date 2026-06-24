@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const FAQ = require('./models/FAQ');
+require('dotenv').config();
 
 const defaultFAQs = [
   {
