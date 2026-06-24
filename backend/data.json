@@ -1,0 +1,18 @@
+{
+  "users": [
+    {
+      "id": "a86992b2-81cb-4b4d-8271-8d48f705f894",
+      "name": "Pawan",
+      "email": "soxinib263@fishnone.com",
+      "password": "$2b$10$TRSu2rE11z6aLyJ6zPNTvOYedHItsbP9r5P9Hvg0yYmaTiZYnIbb2",
+      "role": "user",
+      "reputation": 0,
+      "createdAt": "2026-06-24T07:17:18.282Z"
+    }
+  ],
+  "questions": [],
+  "answers": [],
+  "votes": [],
+  "faqs": [],
+  "reports": []
+}
