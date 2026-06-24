@@ -58,7 +58,7 @@ export default function FAQs() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--hairline)' }}>
           {filtered.map(faq => (
-            <div key={faq.id} className="card" style={{ borderColor: 'transparent', cursor: 'pointer' }} onClick={() => setOpenId(openId === faq.id ? null : faq.id)}>
+            <div key={faq._id} className="card" style={{ borderColor: 'transparent', cursor: 'pointer' }} onClick={() => setOpenId(openId === faq._id ? null : faq._id)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
