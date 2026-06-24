@@ -81,7 +81,7 @@ export default function Home() {
                 </div>
               )}
               {questions.map(q => (
-                <div key={q.id} className="card" style={{ borderColor: 'transparent' }}>
+                <div key={q._id} className="card" style={{ borderColor: 'transparent' }}>
                   <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                     <div style={{ textAlign: 'center', minWidth: 56, padding: '4px 0' }}>
                       <div style={{ fontSize: 22, fontWeight: 700, color: q.score > 0 ? 'var(--success)' : q.score < 0 ? 'var(--m-red)' : 'var(--on-dark)' }}>{q.score}</div>
@@ -124,7 +124,7 @@ export default function Home() {
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--hairline)' }}>
                   {faqs.map(f => (
-                    <div key={f.id} className="card" style={{ borderColor: 'transparent' }}>
+                    <div key={f._id} className="card" style={{ borderColor: 'transparent' }}>
                       <p style={{ fontWeight: 700, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>{f.question}</p>
                       <p style={{ color: 'var(--body)', fontSize: 13, fontWeight: 300, lineHeight: 1.5 }}>{f.answer.substring(0, 100)}…</p>
                     </div>

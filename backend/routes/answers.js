@@ -1,95 +1,110 @@
 const express = require('express');
-const { v4: uuid } = require('uuid');
-const DB = require('../store/db');
+const Answer = require('../models/Answer');
+const Question = require('../models/Question');
+const Vote = require('../models/Vote');
+const User = require('../models/User');
+const FAQ = require('../models/FAQ');
 const { auth, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
-function enrichAnswer(a) {
-  const votes = DB.votes.filter(v => v.targetType === 'answer' && v.targetId === a.id);
+async function enrichAnswer(a) {
+  const votes = await Vote.find({ targetType: 'answer', targetId: a._id });
   const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
-  const author = DB.users.find(u => u.id === a.userId);
-  return { ...a, score, author: author ? { id: author.id, name: author.name, reputation: author.reputation } : null };
+  const author = await User.findById(a.userId).select('name reputation');
+  return { ...a.toObject(), score, author };
 }
 
-router.get('/question/:questionId', optionalAuth, (req, res) => {
-  const answers = DB.answers.filter(a => a.questionId === req.params.questionId).map(enrichAnswer);
-  answers.sort((a, b) => {
-    if (a.isAccepted && !b.isAccepted) return -1;
-    if (!a.isAccepted && b.isAccepted) return 1;
-    return b.score - a.score;
-  });
-  res.json(answers);
-});
-
-router.post('/', auth, (req, res) => {
-  const { questionId, content } = req.body;
-  if (!questionId || !content) return res.status(400).json({ message: 'questionId and content required' });
-  const q = DB.questions.find(q => q.id === questionId);
-  if (!q) return res.status(404).json({ message: 'Question not found' });
-  const answer = { id: uuid(), questionId, userId: req.user.id, content, isAccepted: false, createdAt: new Date().toISOString() };
-  DB.answers.push(answer);
-  const user = DB.users.find(u => u.id === req.user.id);
-  if (user) { user.reputation = (user.reputation || 0) + 10; }
-
-  const answers = DB.answers.filter(a => a.questionId === questionId);
-  const votes = DB.votes.filter(v => v.targetType === 'question' && v.targetId === questionId);
-  const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
-  if (q.views >= 50 && answers.length >= 1 && score >= 5) {
-    const existing = DB.faqs.find(f => f.sourceQuestionId === questionId);
-    if (!existing) {
-      DB.faqs.push({ id: uuid(), question: q.title, answer: answer.content, category: q.tags[0] || 'General', sourceQuestionId: questionId, createdAt: new Date().toISOString() });
-    }
+router.get('/question/:questionId', optionalAuth, async (req, res) => {
+  try {
+    const answers = await Answer.find({ questionId: req.params.questionId });
+    const enriched = await Promise.all(answers.map(enrichAnswer));
+    enriched.sort((a, b) => {
+      if (a.isAccepted && !b.isAccepted) return -1;
+      if (!a.isAccepted && b.isAccepted) return 1;
+      return b.score - a.score;
+    });
+    res.json(enriched);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
-
-  DB.save();
-  res.status(201).json(enrichAnswer(answer));
 });
 
-router.put('/:id', auth, (req, res) => {
-  const a = DB.answers.find(a => a.id === req.params.id);
-  if (!a) return res.status(404).json({ message: 'Not found' });
-  if (a.userId !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
-  if (req.body.content) a.content = req.body.content;
-  DB.save();
-  res.json(enrichAnswer(a));
-});
+router.post('/', auth, async (req, res) => {
+  try {
+    const { questionId, content } = req.body;
+    if (!questionId || !content) return res.status(400).json({ message: 'questionId and content required' });
+    const q = await Question.findById(questionId);
+    if (!q) return res.status(404).json({ message: 'Question not found' });
+    const answer = await Answer.create({ questionId, userId: req.user.id, content });
+    await User.findByIdAndUpdate(req.user.id, { $inc: { reputation: 10 } });
 
-router.delete('/:id', auth, (req, res) => {
-  const idx = DB.answers.findIndex(a => a.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ message: 'Not found' });
-  const a = DB.answers[idx];
-  if (a.userId !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
-  DB.answers.splice(idx, 1);
-  DB.save();
-  res.json({ message: 'Deleted' });
-});
-
-router.post('/:id/accept', auth, (req, res) => {
-  const a = DB.answers.find(a => a.id === req.params.id);
-  if (!a) return res.status(404).json({ message: 'Not found' });
-  const q = DB.questions.find(q => q.id === a.questionId);
-  if (!q) return res.status(404).json({ message: 'Question not found' });
-  if (q.userId !== req.user.id) return res.status(403).json({ message: 'Only question owner can accept' });
-
-  DB.answers.forEach(ans => { if (ans.questionId === a.questionId) ans.isAccepted = false; });
-  a.isAccepted = true;
-  q.acceptedAnswerId = a.id;
-
-  const answerAuthor = DB.users.find(u => u.id === a.userId);
-  if (answerAuthor) { answerAuthor.reputation = (answerAuthor.reputation || 0) + 15; }
-
-  const votes = DB.votes.filter(v => v.targetType === 'question' && v.targetId === q.id);
-  const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
-  if (q.views >= 10 || score >= 3) {
-    const existing = DB.faqs.find(f => f.sourceQuestionId === q.id);
-    if (!existing) {
-      DB.faqs.push({ id: uuid(), question: q.title, answer: a.content, category: q.tags[0] || 'General', sourceQuestionId: q.id, createdAt: new Date().toISOString() });
+    const [answerCount, votes] = await Promise.all([
+      Answer.countDocuments({ questionId }),
+      Vote.find({ targetType: 'question', targetId: questionId })
+    ]);
+    const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
+    if (q.views >= 50 && answerCount >= 1 && score >= 5) {
+      const exists = await FAQ.findOne({ sourceQuestionId: questionId });
+      if (!exists) await FAQ.create({ question: q.title, answer: content, category: q.tags[0] || 'General', sourceQuestionId: questionId });
     }
-  }
 
-  DB.save();
-  res.json(enrichAnswer(a));
+    res.status(201).json(await enrichAnswer(answer));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const a = await Answer.findById(req.params.id);
+    if (!a) return res.status(404).json({ message: 'Not found' });
+    if (a.userId.toString() !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+    if (req.body.content) { a.content = req.body.content; await a.save(); }
+    res.json(await enrichAnswer(a));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const a = await Answer.findById(req.params.id);
+    if (!a) return res.status(404).json({ message: 'Not found' });
+    if (a.userId.toString() !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+    await Answer.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post('/:id/accept', auth, async (req, res) => {
+  try {
+    const a = await Answer.findById(req.params.id);
+    if (!a) return res.status(404).json({ message: 'Not found' });
+    const q = await Question.findById(a.questionId);
+    if (!q) return res.status(404).json({ message: 'Question not found' });
+    if (q.userId.toString() !== req.user.id) return res.status(403).json({ message: 'Only question owner can accept' });
+
+    await Answer.updateMany({ questionId: a.questionId }, { isAccepted: false });
+    a.isAccepted = true;
+    await a.save();
+    q.acceptedAnswerId = a._id;
+    await q.save();
+    await User.findByIdAndUpdate(a.userId, { $inc: { reputation: 15 } });
+
+    const votes = await Vote.find({ targetType: 'question', targetId: q._id });
+    const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
+    if (q.views >= 10 || score >= 3) {
+      const exists = await FAQ.findOne({ sourceQuestionId: q._id });
+      if (!exists) await FAQ.create({ question: q.title, answer: a.content, category: q.tags[0] || 'General', sourceQuestionId: q._id });
+    }
+
+    res.json(await enrichAnswer(a));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = router;

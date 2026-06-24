@@ -1,15 +1,20 @@
 const express = require('express');
-const { v4: uuid } = require('uuid');
-const DB = require('../store/db');
+const Question = require('../models/Question');
+const Answer = require('../models/Answer');
+const Vote = require('../models/Vote');
+const User = require('../models/User');
 const { auth, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 function levenshtein(a, b) {
   const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0));
-  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
-    dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
+  const dp = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0)
+  );
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j-1], dp[i-1][j], dp[i][j-1]);
   return dp[m][n];
 }
 
@@ -19,80 +24,101 @@ function similarity(a, b) {
   return 1 - levenshtein(a.toLowerCase(), b.toLowerCase()) / maxLen;
 }
 
-function enrichQuestion(q) {
-  const answers = DB.answers.filter(a => a.questionId === q.id);
-  const votes = DB.votes.filter(v => v.targetType === 'question' && v.targetId === q.id);
+async function enrichQuestion(q) {
+  const [answerCount, votes] = await Promise.all([
+    Answer.countDocuments({ questionId: q._id }),
+    Vote.find({ targetType: 'question', targetId: q._id })
+  ]);
   const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
-  const author = DB.users.find(u => u.id === q.userId);
-  return { ...q, answerCount: answers.length, score, author: author ? { id: author.id, name: author.name, reputation: author.reputation } : null };
+  const author = await User.findById(q.userId).select('name reputation');
+  return { ...q.toObject(), answerCount, score, author };
 }
 
-router.get('/', optionalAuth, (req, res) => {
-  const { tag, sort = 'newest', page = 1, limit = 10 } = req.query;
-  let qs = [...DB.questions];
-  if (tag) qs = qs.filter(q => q.tags.includes(tag));
+router.get('/', optionalAuth, async (req, res) => {
+  try {
+    const { tag, sort = 'newest', page = 1, limit = 10 } = req.query;
+    const filter = tag ? { tags: tag } : {};
+    let questions = await Question.find(filter);
 
-  qs = qs.map(enrichQuestion);
-  if (sort === 'top') qs.sort((a, b) => b.score - a.score);
-  else if (sort === 'unanswered') qs = qs.filter(q => q.answerCount === 0).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  else qs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const enriched = await Promise.all(questions.map(enrichQuestion));
 
-  const total = qs.length;
-  const skip = (Number(page) - 1) * Number(limit);
-  res.json({ questions: qs.slice(skip, skip + Number(limit)), total, page: Number(page) });
+    let sorted;
+    if (sort === 'top') sorted = enriched.sort((a, b) => b.score - a.score);
+    else if (sort === 'unanswered') sorted = enriched.filter(q => q.answerCount === 0).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    else sorted = enriched.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const total = sorted.length;
+    const skip = (Number(page) - 1) * Number(limit);
+    res.json({ questions: sorted.slice(skip, skip + Number(limit)), total, page: Number(page) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.get('/check-duplicate', (req, res) => {
-  const { title } = req.query;
-  if (!title) return res.json({ similar: [] });
-  const similar = DB.questions
-    .map(q => ({ ...q, sim: similarity(title, q.title) }))
-    .filter(q => q.sim > 0.5)
-    .sort((a, b) => b.sim - a.sim)
-    .slice(0, 3);
-  res.json({ similar });
+router.get('/check-duplicate', async (req, res) => {
+  try {
+    const { title } = req.query;
+    if (!title) return res.json({ similar: [] });
+    const questions = await Question.find({});
+    const similar = questions
+      .map(q => ({ ...q.toObject(), sim: similarity(title, q.title) }))
+      .filter(q => q.sim > 0.5)
+      .sort((a, b) => b.sim - a.sim)
+      .slice(0, 3);
+    res.json({ similar });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.get('/:id', optionalAuth, (req, res) => {
-  const q = DB.questions.find(q => q.id === req.params.id);
-  if (!q) return res.status(404).json({ message: 'Not found' });
-  q.views = (q.views || 0) + 1;
-  DB.save();
-  res.json(enrichQuestion(q));
+router.get('/:id', optionalAuth, async (req, res) => {
+  try {
+    const q = await Question.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } }, { new: true });
+    if (!q) return res.status(404).json({ message: 'Not found' });
+    res.json(await enrichQuestion(q));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.post('/', auth, (req, res) => {
-  const { title, description, tags } = req.body;
-  if (!title || !description) return res.status(400).json({ message: 'Title and description required' });
-  const question = { id: uuid(), title, description, tags: tags || [], userId: req.user.id, views: 0, acceptedAnswerId: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-  DB.questions.push(question);
-  const user = DB.users.find(u => u.id === req.user.id);
-  if (user) { user.reputation = (user.reputation || 0) + 5; }
-  DB.save();
-  res.status(201).json(enrichQuestion(question));
+router.post('/', auth, async (req, res) => {
+  try {
+    const { title, description, tags } = req.body;
+    if (!title || !description) return res.status(400).json({ message: 'Title and description required' });
+    const question = await Question.create({ title, description, tags: tags || [], userId: req.user.id });
+    await User.findByIdAndUpdate(req.user.id, { $inc: { reputation: 5 } });
+    res.status(201).json(await enrichQuestion(question));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.put('/:id', auth, (req, res) => {
-  const q = DB.questions.find(q => q.id === req.params.id);
-  if (!q) return res.status(404).json({ message: 'Not found' });
-  if (q.userId !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
-  const { title, description, tags } = req.body;
-  if (title) q.title = title;
-  if (description) q.description = description;
-  if (tags) q.tags = tags;
-  q.updatedAt = new Date().toISOString();
-  DB.save();
-  res.json(enrichQuestion(q));
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const q = await Question.findById(req.params.id);
+    if (!q) return res.status(404).json({ message: 'Not found' });
+    if (q.userId.toString() !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+    const { title, description, tags } = req.body;
+    if (title) q.title = title;
+    if (description) q.description = description;
+    if (tags) q.tags = tags;
+    await q.save();
+    res.json(await enrichQuestion(q));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.delete('/:id', auth, (req, res) => {
-  const idx = DB.questions.findIndex(q => q.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ message: 'Not found' });
-  const q = DB.questions[idx];
-  if (q.userId !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
-  DB.questions.splice(idx, 1);
-  DB.save();
-  res.json({ message: 'Deleted' });
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    const q = await Question.findById(req.params.id);
+    if (!q) return res.status(404).json({ message: 'Not found' });
+    if (q.userId.toString() !== req.user.id && req.user.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
+    await Question.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Deleted' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = router;

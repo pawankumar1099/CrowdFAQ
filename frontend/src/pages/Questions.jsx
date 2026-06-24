@@ -78,7 +78,7 @@ export default function Questions() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--hairline)' }}>
           {questions.map(q => (
-            <div key={q.id} className="card" style={{ borderColor: 'transparent', borderRadius: 0 }}>
+            <div key={q._id} className="card" style={{ borderColor: 'transparent', borderRadius: 0 }}>
               <div style={{ display: 'flex', gap: 20 }}>
                 {/* Stats column */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 72, alignItems: 'center', paddingTop: 4 }}>

@@ -59,7 +59,7 @@ export default function Search() {
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--hairline)' }}>
             {results.questions.map(q => (
-              <div key={q.id} className="card" style={{ borderColor: 'transparent' }}>
+              <div key={q._id} className="card" style={{ borderColor: 'transparent' }}>
                 <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                   <div style={{ textAlign: 'center', minWidth: 56 }}>
                     <div style={{ fontSize: 18, fontWeight: 700, color: q.score > 0 ? 'var(--success)' : 'var(--on-dark)' }}>{q.score}</div>
@@ -86,7 +86,7 @@ export default function Search() {
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: 'var(--hairline)' }}>
             {results.faqs.map(f => (
-              <div key={f.id} className="card" style={{ borderColor: 'transparent', borderLeft: '3px solid var(--m-blue-dark)' }}>
+              <div key={f._id} className="card" style={{ borderColor: 'transparent', borderLeft: '3px solid var(--m-blue-dark)' }}>
                 <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                   {f.category && <span className="tag" style={{ fontSize: 11 }}>{f.category}</span>}
                   <span style={{ fontSize: 11, color: 'var(--m-blue-dark)', fontWeight: 700, letterSpacing: 1 }}>OFFICIAL FAQ</span>

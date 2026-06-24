@@ -1,19 +1,26 @@
 const express = require('express');
-const DB = require('../store/db');
+const FAQ = require('../models/FAQ');
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
-  const { category } = req.query;
-  let faqs = [...DB.faqs];
-  if (category) faqs = faqs.filter(f => f.category === category);
-  faqs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  res.json(faqs);
+router.get('/', async (req, res) => {
+  try {
+    const { category } = req.query;
+    const filter = category ? { category } : {};
+    const faqs = await FAQ.find(filter).sort({ createdAt: -1 });
+    res.json(faqs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.get('/categories', (req, res) => {
-  const cats = [...new Set(DB.faqs.map(f => f.category).filter(Boolean))];
-  res.json(cats);
+router.get('/categories', async (req, res) => {
+  try {
+    const cats = await FAQ.distinct('category');
+    res.json(cats.filter(Boolean));
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = router;

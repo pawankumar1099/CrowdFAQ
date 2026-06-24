@@ -79,8 +79,8 @@ export default function Profile() {
           {profile.questions.length === 0 ? (
             <p style={{ color: 'var(--muted)', padding: 24 }}>No questions asked yet.</p>
           ) : profile.questions.map(q => (
-            <div key={q.id} className="card" style={{ borderColor: 'transparent' }}>
-              <Link to={`/questions/${q.id}`} style={{ textDecoration: 'none', color: 'var(--on-dark)', fontSize: 15, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, display: 'block', marginBottom: 6 }}>{q.title}</Link>
+            <div key={q._id} className="card" style={{ borderColor: 'transparent' }}>
+              <Link to={`/questions/${q._id}`} style={{ textDecoration: 'none', color: 'var(--on-dark)', fontSize: 15, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, display: 'block', marginBottom: 6 }}>{q.title}</Link>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {q.tags.slice(0, 3).map(t => <span key={t} className="tag" style={{ fontSize: 11 }}>{t}</span>)}
                 <span style={{ color: 'var(--muted)', fontSize: 12, marginLeft: 'auto' }}>{timeAgo(q.createdAt)}</span>
@@ -96,7 +96,7 @@ export default function Profile() {
           {profile.answers.length === 0 ? (
             <p style={{ color: 'var(--muted)', padding: 24 }}>No answers given yet.</p>
           ) : profile.answers.map(a => (
-            <div key={a.id} className="card" style={{ borderColor: 'transparent', borderLeft: a.isAccepted ? '3px solid var(--success)' : '3px solid transparent' }}>
+            <div key={a._id} className="card" style={{ borderColor: 'transparent', borderLeft: a.isAccepted ? '3px solid var(--success)' : '3px solid transparent' }}>
               {a.isAccepted && <div className="accepted-badge" style={{ marginBottom: 8 }}>✓ ACCEPTED</div>}
               <Link to={`/questions/${a.questionId}`} style={{ textDecoration: 'none', color: 'var(--body)', fontSize: 14, fontWeight: 300, lineHeight: 1.6, display: 'block' }}>{a.content.substring(0, 200)}{a.content.length > 200 ? '…' : ''}</Link>
               <span style={{ color: 'var(--muted)', fontSize: 12, marginTop: 8, display: 'block' }}>{timeAgo(a.createdAt)}</span>

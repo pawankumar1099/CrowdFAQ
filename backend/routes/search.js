@@ -1,31 +1,35 @@
 const express = require('express');
-const DB = require('../store/db');
+const Question = require('../models/Question');
+const Answer = require('../models/Answer');
+const Vote = require('../models/Vote');
+const FAQ = require('../models/FAQ');
 
 const router = express.Router();
 
-router.get('/', (req, res) => {
-  const { q } = req.query;
-  if (!q || q.length < 2) return res.json({ questions: [], faqs: [] });
-  const term = q.toLowerCase();
+router.get('/', async (req, res) => {
+  try {
+    const { q } = req.query;
+    if (!q || q.length < 2) return res.json({ questions: [], faqs: [] });
 
-  const questions = DB.questions.filter(question => {
-    return (
-      question.title.toLowerCase().includes(term) ||
-      question.description.toLowerCase().includes(term) ||
-      question.tags.some(t => t.toLowerCase().includes(term))
-    );
-  }).slice(0, 10).map(question => {
-    const answers = DB.answers.filter(a => a.questionId === question.id);
-    const votes = DB.votes.filter(v => v.targetType === 'question' && v.targetId === question.id);
-    const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
-    return { ...question, answerCount: answers.length, score };
-  });
+    const regex = new RegExp(q, 'i');
+    const [rawQuestions, faqs] = await Promise.all([
+      Question.find({ $or: [{ title: regex }, { description: regex }, { tags: regex }] }).limit(10),
+      FAQ.find({ $or: [{ question: regex }, { answer: regex }, { category: regex }] }).limit(5)
+    ]);
 
-  const faqs = DB.faqs.filter(f => {
-    return f.question.toLowerCase().includes(term) || f.answer.toLowerCase().includes(term) || (f.category && f.category.toLowerCase().includes(term));
-  }).slice(0, 5);
+    const questions = await Promise.all(rawQuestions.map(async question => {
+      const [answerCount, votes] = await Promise.all([
+        Answer.countDocuments({ questionId: question._id }),
+        Vote.find({ targetType: 'question', targetId: question._id })
+      ]);
+      const score = votes.filter(v => v.type === 'up').length - votes.filter(v => v.type === 'down').length;
+      return { ...question.toObject(), answerCount, score };
+    }));
 
-  res.json({ questions, faqs });
+    res.json({ questions, faqs });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 module.exports = router;

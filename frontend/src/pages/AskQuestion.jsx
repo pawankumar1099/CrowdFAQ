@@ -64,7 +64,7 @@ export default function AskQuestion() {
           <p style={{ fontSize: 13, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--m-blue-dark)', marginBottom: 12 }}>⚠ SIMILAR QUESTIONS FOUND</p>
           <p style={{ color: 'var(--body)', fontSize: 14, marginBottom: 12 }}>Please check if your question is already answered:</p>
           {similar.map(q => (
-            <Link key={q.id} to={`/questions/${q.id}`} target="_blank" style={{ display: 'block', color: 'var(--on-dark)', textDecoration: 'none', fontSize: 14, padding: '6px 0', borderBottom: '1px solid var(--hairline)' }}>→ {q.title}</Link>
+            <Link key={q._id} to={`/questions/${q._id}`} target="_blank" style={{ display: 'block', color: 'var(--on-dark)', textDecoration: 'none', fontSize: 14, padding: '6px 0', borderBottom: '1px solid var(--hairline)' }}>→ {q.title}</Link>
           ))}
           <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 12 }}>Still different? Continue posting below.</p>
         </div>

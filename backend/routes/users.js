@@ -1,43 +1,60 @@
 const express = require('express');
-const DB = require('../store/db');
+const User = require('../models/User');
+const Question = require('../models/Question');
+const Answer = require('../models/Answer');
+const FAQ = require('../models/FAQ');
+const Vote = require('../models/Vote');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/leaderboard', (req, res) => {
-  const top = DB.users
-    .map(u => ({ id: u.id, name: u.name, reputation: u.reputation || 0, role: u.role }))
-    .sort((a, b) => b.reputation - a.reputation)
-    .slice(0, 10);
-  res.json(top);
+router.get('/leaderboard', async (req, res) => {
+  try {
+    const users = await User.find({}).select('name reputation role').sort({ reputation: -1 }).limit(10);
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.get('/:id/stats', (req, res) => {
-  const user = DB.users.find(u => u.id === req.params.id);
-  if (!user) return res.status(404).json({ message: 'Not found' });
-  const questions = DB.questions.filter(q => q.userId === req.params.id);
-  const answers = DB.answers.filter(a => a.userId === req.params.id);
-  const accepted = answers.filter(a => a.isAccepted).length;
-  const { password: _, ...safe } = user;
-  res.json({ ...safe, questionsCount: questions.length, answersCount: answers.length, acceptedAnswers: accepted, questions, answers });
+router.get('/admin/dashboard', auth, async (req, res) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'moderator')
+    return res.status(403).json({ message: 'Forbidden' });
+  try {
+    const [totalUsers, totalQuestions, totalAnswers, totalFaqs, recentUsers, trendingTags] = await Promise.all([
+      User.countDocuments(),
+      Question.countDocuments(),
+      Answer.countDocuments(),
+      FAQ.countDocuments(),
+      User.find({}).select('-password').sort({ createdAt: -1 }).limit(5),
+      getTrendingTags()
+    ]);
+    res.json({ totalUsers, totalQuestions, totalAnswers, totalFaqs, recentUsers, trendingTags });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.get('/admin/dashboard', auth, (req, res) => {
-  if (req.user.role !== 'admin' && req.user.role !== 'moderator') return res.status(403).json({ message: 'Forbidden' });
-  res.json({
-    totalUsers: DB.users.length,
-    totalQuestions: DB.questions.length,
-    totalAnswers: DB.answers.length,
-    totalFaqs: DB.faqs.length,
-    recentUsers: DB.users.slice(-5).map(u => { const { password: _, ...s } = u; return s; }),
-    trendingTags: getTrendingTags()
-  });
-});
-
-function getTrendingTags() {
+async function getTrendingTags() {
+  const questions = await Question.find({}, 'tags');
   const tagCount = {};
-  DB.questions.forEach(q => q.tags.forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
+  questions.forEach(q => q.tags.forEach(t => { tagCount[t] = (tagCount[t] || 0) + 1; }));
   return Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([tag, count]) => ({ tag, count }));
 }
+
+router.get('/:id/stats', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: 'Not found' });
+    const [questions, answers] = await Promise.all([
+      Question.find({ userId: req.params.id }).sort({ createdAt: -1 }),
+      Answer.find({ userId: req.params.id }).sort({ createdAt: -1 })
+    ]);
+    const acceptedAnswers = answers.filter(a => a.isAccepted).length;
+    res.json({ ...user.toObject(), questionsCount: questions.length, answersCount: answers.length, acceptedAnswers, questions, answers });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 module.exports = router;

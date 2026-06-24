@@ -126,12 +126,12 @@ export default function QuestionDetail() {
         </h2>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 1, background: answers.length ? 'var(--hairline)' : 'transparent' }}>
           {answers.map(a => (
-            <div key={a.id} className="card" style={{ borderColor: 'transparent', borderLeft: a.isAccepted ? '3px solid var(--success)' : '3px solid transparent' }}>
+            <div key={a._id} className="card" style={{ borderColor: 'transparent', borderLeft: a.isAccepted ? '3px solid var(--success)' : '3px solid transparent' }}>
               <div style={{ display: 'flex', gap: 24 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, minWidth: 48 }}>
-                  <button className={`vote-btn up${myVotes.find(v => v.targetType === 'answer' && v.targetId === a.id)?.type === 'up' ? ' active' : ''}`} onClick={() => handleVote('answer', a.id, 'up')}>▲</button>
+                  <button className={`vote-btn up${myVotes.find(v => v.targetType === 'answer' && v.targetId === a._id)?.type === 'up' ? ' active' : ''}`} onClick={() => handleVote('answer', a._id, 'up')}>▲</button>
                   <span style={{ fontSize: 18, fontWeight: 700, color: a.score > 0 ? 'var(--success)' : a.score < 0 ? 'var(--m-red)' : 'var(--on-dark)' }}>{a.score}</span>
-                  <button className={`vote-btn down${myVotes.find(v => v.targetType === 'answer' && v.targetId === a.id)?.type === 'down' ? ' active' : ''}`} onClick={() => handleVote('answer', a.id, 'down')}>▼</button>
+                  <button className={`vote-btn down${myVotes.find(v => v.targetType === 'answer' && v.targetId === a._id)?.type === 'down' ? ' active' : ''}`} onClick={() => handleVote('answer', a._id, 'down')}>▼</button>
                   {a.isAccepted && <div style={{ color: 'var(--success)', fontSize: 20 }}>✓</div>}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -143,8 +143,8 @@ export default function QuestionDetail() {
                     <span style={{ color: 'var(--muted)', fontSize: 13 }}>
                       {a.author?.name} · {timeAgo(a.createdAt)}
                     </span>
-                    {user && user.id === question.userId && !a.isAccepted && (
-                      <button className="btn-primary btn-sm" onClick={() => handleAccept(a.id)} style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>✓ ACCEPT</button>
+                    {user && (user.id === question.userId?.toString() || user.id === question.userId) && !a.isAccepted && (
+                      <button className="btn-primary btn-sm" onClick={() => handleAccept(a._id)} style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>✓ ACCEPT</button>
                     )}
                   </div>
                 </div>
